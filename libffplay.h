@@ -19,40 +19,55 @@
 #ifndef __LIBFFPLAY_H
 #define __LIBFFPLAY_H 1
 
+#include <sys/types.h>
+
 struct libffplay_ctx;
 typedef struct libffplay_ctx libffplay_ctx_t;
 
-typedef lockmgr_fn_t struct libffplay_audiomgr {
-	void *userdata;
-	int (*open_device) (void *userdata, int freq, int channels,
-			    int bits_per_sample, void (*audio_cb) (void *buf,
-								   size_t size,
-								   int pos));
-	int (*close_device) (void *userdata);
-};
 typedef struct libffplay_audiomgr libffplay_audiomgr_t;
-
-struct libffplay_videomgr {
-	void *userdata;
+struct libffplay_audiomgr {
+	int (*open_device) (libffplay_audiomgr_t *self, int freq, int channels,
+			    int bits_per_sample, void *opaque,
+			    void (*audio_cb) (void *opaque,
+					      void *buf,
+					      size_t size));
+	int (*close_device) (libffplay_audiomgr_t *self);
 };
+
 typedef struct libffplay_videomgr libffplay_videomgr_t;
+struct libffplay_videomgr {
+};
+
+enum {
+	LFP_EVENT_EOF,
+	LFP_EVENT_TIMESTAMP,
+};
+
+typedef struct libffplay_eventmgr libffplay_eventmgr_t;
+struct libffplay_eventmgr {
+	void (*send_event)(libffplay_eventmgr_t *self, int event_type, void *data);
+};
 
 enum {
 	LFP_SEEK_SET = 0,
 	LFP_SEEK_CUR = 1,
-	LFP_SEEK_END = 2,
 };
 
 libffplay_ctx_t *libffplay_init(void);
-void libffplay_set_audiomgr(libffplay_ctx_t * ctx,
-			    libffplay_audiomgr_t * audiomgr);
-void libffplay_set_videomgr(libffplay_ctx_t * ctx,
-			    libffplay_videomgr_t * videomgr);
+void libffplay_set_audiomgr(libffplay_ctx_t *ctx,
+			    libffplay_audiomgr_t *audiomgr);
+void libffplay_set_videomgr(libffplay_ctx_t *ctx,
+			    libffplay_videomgr_t *videomgr);
+void libffplay_set_eventmgr(libffplay_ctx_t *ctx,
+			    libffplay_eventmgr_t *eventmgr);
 /* returns duration if success, negative error code otherwise */
 int libffplay_play(libffplay_ctx_t * ctx, const char *filename);
 void libffplay_pause(libffplay_ctx_t * ctx);
 void libffplay_resume(libffplay_ctx_t * ctx);
-void libffplay_seek(libffplay_ctx_t * ctx, int pos, int whence);
+void libffplay_toggle_pause(libffplay_ctx_t *ctx);
+void libffplay_seek(libffplay_ctx_t * ctx, double pos, int whence);
+double libffplay_tell(libffplay_ctx_t *ctx);
+double libffplay_stream_length(libffplay_ctx_t *ctx);
 void libffplay_stop(libffplay_ctx_t * ctx);
 void libffplay_exit(libffplay_ctx_t * ctx);
 
