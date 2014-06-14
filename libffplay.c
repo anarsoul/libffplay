@@ -3275,9 +3275,12 @@ static void *read_thread(void *arg)
 			  || is->subtitle_stream < 0
 			  || is->subtitleq.abort_request)))) {
 			struct timespec ts;
+			struct timeval tv;
+
+			gettimeofday(&tv, NULL);
 			memset(&ts, 0, sizeof(ts));
-			ts.tv_sec = 0;
-			ts.tv_nsec = 10 * 1000 * 1000;
+			ts.tv_sec = tv.tv_sec;
+			ts.tv_nsec = tv.tv_usec * 1000 + 10 * 1000 * 1000;
 			/* wait 10 ms */
 			pthread_mutex_lock(&wait_mutex);
 			pthread_cond_timedwait(&is->continue_read_thread,
