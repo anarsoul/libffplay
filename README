@@ -1,0 +1,11 @@
+libffplay is a library for creating simple media (audio/video) players.
+
+It depends on ffmpeg (or libav) for demuxing and decoding audio/video.
+
+To compile and install invoke:
+	make all install
+
+To compile an example invoke:
+	make -C examples
+
+See examples/ffplay-sdl.c for an example of API usage.
