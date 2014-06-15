@@ -34,8 +34,36 @@ struct libffplay_audiomgr {
 	int (*close_device) (libffplay_audiomgr_t *self);
 };
 
+typedef struct libffplay_picture libffplay_picture_t;
+struct libffplay_picture {
+	void *planes[3];
+	size_t pitches[3];
+	size_t width;
+	size_t height;
+	void *userdata;
+	int allocated;
+	double pts, duration;
+	size_t pos;
+	int serial;
+	int sar_den;
+	int sar_num;
+};
+
+typedef struct libffplay_rect libffplay_rect_t;
+struct libffplay_rect {
+	ssize_t x, y;
+	size_t w, h;
+};
+
 typedef struct libffplay_videomgr libffplay_videomgr_t;
 struct libffplay_videomgr {
+	int  (*alloc_picture_planes)(libffplay_videomgr_t *self, libffplay_picture_t *pic,
+		size_t wanted_width, size_t wanted_height);
+	void (*lock_picture)(libffplay_videomgr_t *self, libffplay_picture_t *pic);
+	void (*unlock_picture)(libffplay_videomgr_t *self, libffplay_picture_t *pic);
+	void (*free_picture_planes)(libffplay_videomgr_t *self, libffplay_picture_t *pic);
+	void (*display_picture)(libffplay_videomgr_t *self, libffplay_picture_t *pic,
+		libffplay_rect_t *rect);
 };
 
 enum {
@@ -70,5 +98,6 @@ double libffplay_tell(libffplay_ctx_t *ctx);
 double libffplay_stream_length(libffplay_ctx_t *ctx);
 void libffplay_stop(libffplay_ctx_t * ctx);
 void libffplay_exit(libffplay_ctx_t * ctx);
+void libffplay_video_refresh(libffplay_ctx_t * ctx, double *remaining_time);
 
 #endif

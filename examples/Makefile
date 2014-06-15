@@ -7,7 +7,7 @@ CC:=c99
 FFPLAY_SDL_SRC=ffplay-sdl.c
 FFPLAY_SDL_OBJ=${FFPLAY_SDL_SRC:.c=.o}
 
-CFLAGS+=$(shell pkg-config --cflags sdl) -I.. -g
+CFLAGS+=$(shell pkg-config --cflags sdl) -I.. -g -O2
 LDFLAGS+=$(shell pkg-config --libs sdl) -L.. -lffplay
 
 ffplay-sdl: ${FFPLAY_SDL_OBJ}

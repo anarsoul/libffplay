@@ -19,8 +19,10 @@
  */
 
 #define SDL_AUDIO_BUFFER_SIZE 1024
+#define FF_ALLOC_EVENT    (SDL_USEREVENT)
 #define FF_QUIT_EVENT    (SDL_USEREVENT + 2)
 
+#include <errno.h>
 #include <stdio.h>
 
 #include <SDL.h>
@@ -31,6 +33,14 @@
 struct myeventmgr {
 	libffplay_eventmgr_t eventmgr;
 	libffplay_ctx_t *ctx;
+};
+
+struct myvideomgr {
+	libffplay_videomgr_t videomgr;
+	libffplay_ctx_t *ctx;
+	SDL_Surface *screen;
+	SDL_cond *alloc_cond;
+	SDL_mutex *alloc_mutex;
 };
 
 static void (*ffplay_audio_cb) (void *opaque, void *buf, size_t size);
@@ -112,22 +122,122 @@ static void sdl_send_event(libffplay_eventmgr_t *eventmgr, int event_type, void 
 	}
 }
 
+int sdl_alloc_picture_planes(libffplay_videomgr_t *self, libffplay_picture_t *pic, size_t width, size_t height)
+{
+	SDL_Event event;
+	struct myvideomgr *myvideomgr = (struct myvideomgr *)self;
+	if (pic->allocated) {
+		SDL_FreeYUVOverlay(pic->userdata);
+		pic->allocated = 0;
+		pic->userdata = NULL;
+	}
+	pic->width = width;
+	pic->height = height;
+        event.type = FF_ALLOC_EVENT;
+        event.user.data1 = pic;
+        SDL_PushEvent(&event);
+
+	SDL_LockMutex(myvideomgr->alloc_mutex);
+	SDL_CondWait(myvideomgr->alloc_cond, myvideomgr->alloc_mutex);
+	SDL_UnlockMutex(myvideomgr->alloc_mutex);
+	if (!pic->userdata) {
+		fprintf(stderr, "Failed to allocate overlay\n");
+		return -ENOMEM;
+	}
+	pic->allocated = 1;
+
+	fprintf(stderr, "%s: %dx%d\n", __func__, (int)pic->width, (int)pic->height);
+
+	return 0;
+}
+
+void sdl_lock_picture(libffplay_videomgr_t *self, libffplay_picture_t *pic)
+{
+	SDL_Overlay *bmp = pic->userdata;
+
+	if (!pic->allocated)
+		return;
+
+	SDL_LockYUVOverlay(bmp);
+
+        pic->planes[0] = bmp->pixels[0];
+        pic->planes[1] = bmp->pixels[2];
+        pic->planes[2] = bmp->pixels[1];
+
+        pic->pitches[0] = bmp->pitches[0];
+        pic->pitches[1] = bmp->pitches[2];
+        pic->pitches[2] = bmp->pitches[1];
+}
+
+void sdl_unlock_picture(libffplay_videomgr_t *self, libffplay_picture_t *pic)
+{
+	SDL_Overlay *bmp = pic->userdata;
+
+	if (!pic->allocated)
+		return;
+
+	SDL_UnlockYUVOverlay(bmp);
+}
+
+
+void sdl_free_picture_planes(libffplay_videomgr_t *self, libffplay_picture_t *pic)
+{
+	SDL_Overlay *bmp = pic->userdata;
+
+	if (!pic->allocated)
+		return;
+
+	SDL_FreeYUVOverlay(bmp);
+	pic->userdata = NULL;
+	pic->allocated = 0;
+}
+
+void sdl_display_picture(libffplay_videomgr_t *self, libffplay_picture_t *pic, libffplay_rect_t *rect)
+{
+	struct myvideomgr *myvideomgr = (struct myvideomgr *)self;
+	SDL_Rect sdl_rect = {.w = 0, .h = 0, .x = 0, .y = 0};
+	SDL_Overlay *bmp = pic->userdata;
+
+	if (!pic->allocated)
+		return;
+
+	if (rect) {
+		sdl_rect.h = 360;//myvideomgr->screen->h;
+		sdl_rect.w = myvideomgr->screen->w;
+		sdl_rect.x = 0;
+		sdl_rect.y = 60;
+	}
+        SDL_DisplayYUVOverlay(bmp, &sdl_rect);
+}
+
 libffplay_audiomgr_t audiomgr = {
 	.open_device = sdl_open_device,
 	.close_device = sdl_close_device,
 };
 
-libffplay_videomgr_t videomgr = {
+
+struct myvideomgr videomgr = {
+	.videomgr = {
+		.alloc_picture_planes = sdl_alloc_picture_planes,
+		.lock_picture = sdl_lock_picture,
+		.unlock_picture = sdl_unlock_picture,
+		.free_picture_planes = sdl_free_picture_planes,
+		.display_picture = sdl_display_picture,
+	},
 };
 
 struct myeventmgr eventmgr = {
-	.eventmgr = { .send_event = sdl_send_event },
+	.eventmgr = {
+		.send_event = sdl_send_event
+	},
 };
 
 int main(int argc, char *argv[])
 {
+	double remaining_time = 0.0;
 	SDL_Surface *screen;
 	libffplay_ctx_t *ctx;
+	int paused = 0;
 	int flags = SDL_HWSURFACE | SDL_ASYNCBLIT | SDL_HWACCEL;
 
 	if (argc != 2) {
@@ -139,45 +249,71 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Failed to init SDL\n");
 		exit(EXIT_FAILURE);
 	}
-	screen = SDL_SetVideoMode(320, 240, 0, flags);
+	screen = SDL_SetVideoMode(640, 480, 0, flags);
 	if (!screen) {
 		fprintf(stderr, "Failed to open SDL screen\n");
 		exit(EXIT_FAILURE);
 	}
 	ctx = libffplay_init();
+
 	libffplay_set_audiomgr(ctx, &audiomgr);
+
 	eventmgr.ctx = ctx;
 	libffplay_set_eventmgr(ctx, (libffplay_eventmgr_t *)&eventmgr);
+
+	videomgr.ctx = ctx;
+	videomgr.screen = screen;
+	videomgr.alloc_mutex = SDL_CreateMutex();
+	videomgr.alloc_cond = SDL_CreateCond();
+	libffplay_set_videomgr(ctx, (libffplay_videomgr_t *)&videomgr);
+
 	libffplay_play(ctx, argv[1]);
 
 	/* Event loop */
 	for (;;) {
 		SDL_Event event;
 		SDL_PumpEvents();
-		if (SDL_PeepEvents(&event, 1, SDL_GETEVENT, SDL_ALLEVENTS)) {
-			switch (event.type) {
-			case SDL_KEYDOWN:
-				switch (event.key.keysym.sym) {
-				case SDLK_SPACE:
-					libffplay_toggle_pause(ctx);
-					break;
-				case SDLK_LEFT:
-					libffplay_seek(ctx, -5.0, LFP_SEEK_CUR);
-					break;
-				case SDLK_RIGHT:
-					libffplay_seek(ctx, 5.0, LFP_SEEK_CUR);
-					break;
-				default:
-					break;
-				}
+		while (!SDL_PeepEvents(&event, 1, SDL_GETEVENT, SDL_ALLEVENTS)) {
+			if (remaining_time > 0.0)
+				SDL_Delay(remaining_time * 1000);
+			if (!paused)
+				libffplay_video_refresh(ctx, &remaining_time);
+			else
+				remaining_time = 0.01;
+			SDL_PumpEvents();
+		}
+		switch (event.type) {
+		case SDL_KEYDOWN:
+			switch (event.key.keysym.sym) {
+			case SDLK_SPACE:
+				paused = !paused;
+				libffplay_toggle_pause(ctx);
 				break;
-			case SDL_QUIT:
-			case FF_QUIT_EVENT:
-				libffplay_stop(ctx);
-				SDL_Quit();
-				exit(0);
+			case SDLK_LEFT:
+				libffplay_seek(ctx, -5.0, LFP_SEEK_CUR);
+				break;
+			case SDLK_RIGHT:
+				libffplay_seek(ctx, 5.0, LFP_SEEK_CUR);
+				break;
+			default:
 				break;
 			}
+			break;
+		case FF_ALLOC_EVENT:
+			{
+				libffplay_picture_t *pic = event.user.data1;
+				SDL_LockMutex(videomgr.alloc_mutex);
+				pic->userdata = SDL_CreateYUVOverlay(pic->width, pic->height, SDL_YV12_OVERLAY, screen);
+				SDL_CondSignal(videomgr.alloc_cond);
+				SDL_UnlockMutex(videomgr.alloc_mutex);
+			}
+			break;
+		case SDL_QUIT:
+		case FF_QUIT_EVENT:
+			libffplay_stop(ctx);
+			SDL_Quit();
+			exit(0);
+			break;
 		}
 	}
 

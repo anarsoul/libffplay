@@ -6,7 +6,7 @@ PREFIX:=/usr/local
 LIBDIR:=${PREFIX}/lib
 CFLAGS+=$(shell pkg-config --cflags libavformat libavcodec libswscale libavutil libavfilter libswresample libavdevice)
 LDFLAGS+=$(shell pkg-config --libs libavformat libavcodec libswscale libavutil libavfilter libswresample libavdevice) -lm -pthread
-LIBFFPLAY_CFLAGS+=-fpic -shared -g
+LIBFFPLAY_CFLAGS+=-fpic -shared -g -O2
 CC:=c99
 
 LIBFFPLAY_SRC=libffplay.c
