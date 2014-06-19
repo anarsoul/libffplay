@@ -49,7 +49,6 @@
 #include <libavfilter/buffersink.h>
 #include <libavfilter/buffersrc.h>
 
-#include "colorspace.h"
 #include "libffplay.h"
 
 #define MAX_QUEUE_SIZE (15 * 1024 * 1024)
