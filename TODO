@@ -1,0 +1,2 @@
+- Use proper so-name
+- Investigate why libffplay eats 1.5x times more CPU than ffplay

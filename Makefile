@@ -27,4 +27,3 @@ install: libffplay.so
 	install -d ${DESTDIR}${INCDIR}
 	install -m755 libffplay.so ${DESTDIR}${LIBDIR}/
 	install -m644 libffplay.h ${DESTDIR}${INCDIR}/
-
