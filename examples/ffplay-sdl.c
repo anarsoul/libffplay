@@ -107,16 +107,20 @@ static void sdl_send_event(libffplay_eventmgr_t *eventmgr, int event_type, void 
 {
 	struct myeventmgr *myeventmgr = (struct myeventmgr *)eventmgr;
 	double *ts;
+	static double last_ts = 0.0;
 	SDL_Event event;
 
 	switch (event_type) {
 	case LFP_EVENT_TIMESTAMP:
 		ts = data;
-		printf("time: %7.2f of %7.2f\r", *ts, libffplay_stream_length(myeventmgr->ctx));
-		fflush(stdout);
+		if (fabs(last_ts - *ts) > 0.05) {
+			printf("time: %7.2f of %7.2f\r", *ts, libffplay_stream_length(myeventmgr->ctx));
+			fflush(stdout);
+			last_ts = *ts;
+		}
 		break;
 	case LFP_EVENT_EOF:
-		printf("Gonna quit!\n");
+		printf("\n\nGonna quit!\n");
 		fflush(stdout);
 		event.type = FF_QUIT_EVENT;
 		event.user.data1 = NULL;
@@ -351,6 +355,7 @@ int main(int argc, char *argv[])
 		case SDL_QUIT:
 		case FF_QUIT_EVENT:
 			libffplay_stop(ctx);
+			libffplay_deinit(ctx);
 			SDL_Quit();
 			exit(0);
 			break;
