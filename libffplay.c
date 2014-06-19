@@ -276,7 +276,6 @@ struct libffplay_ctx {
 
 /* options specified by the user */
 static AVInputFormat *file_iformat;
-static const char *window_title;
 #if 0
 static int fs_screen_width;
 static int fs_screen_height;
@@ -790,6 +789,7 @@ static void free_subpicture(SubPicture * sp)
 	avsubtitle_free(&sp->sub);
 }
 
+#if 0
 static void calculate_display_rect(libffplay_rect_t * rect, int scr_xleft,
 				   int scr_ytop, int scr_width, int scr_height,
 				   libffplay_picture_t * vp)
@@ -823,6 +823,7 @@ static void calculate_display_rect(libffplay_rect_t * rect, int scr_xleft,
 	rect->w = FFMAX(width, 1);
 	rect->h = FFMAX(height, 1);
 }
+#endif
 
 static void video_image_display(VideoState * is)
 {
@@ -830,13 +831,10 @@ static void video_image_display(VideoState * is)
 	/* SubPicture *sp;
 	int i;
 	AVPicture pict; */
-	libffplay_rect_t rect;
 
 	vp = &is->pictq[is->pictq_rindex];
 	if (vp->allocated) {
-		calculate_display_rect(&rect, is->xleft, is->ytop, is->width,
-				       is->height, vp);
-		is->videomgr->display_picture(is->videomgr, vp, &rect);
+		is->videomgr->display_picture(is->videomgr, vp);
 
 #if 0
 		if (rect.x != is->last_display_rect.x
@@ -2139,6 +2137,7 @@ the_end:
 	return NULL;
 }
 
+#if 0
 static void *subtitle_thread(void *arg)
 {
 	VideoState *is = arg;
@@ -2215,6 +2214,7 @@ static void *subtitle_thread(void *arg)
 	}
 	return NULL;
 }
+#endif
 
 /* copy samples for viewing in editor window */
 static void update_sample_display(VideoState * is, short *samples,
@@ -3010,7 +3010,6 @@ static void *read_thread(void *arg)
 	int eof = 0;
 	int64_t stream_start_time;
 	int pkt_in_play_range = 0;
-	AVDictionaryEntry *t;
 	pthread_mutex_t wait_mutex;
 	pthread_mutex_init(&wait_mutex, NULL);
 
@@ -3102,6 +3101,7 @@ static void *read_thread(void *arg)
 	}
 
 	is->show_mode = show_mode;
+#if 0
 	if (st_index[AVMEDIA_TYPE_VIDEO] >= 0) {
 		AVStream *st = ic->streams[st_index[AVMEDIA_TYPE_VIDEO]];
 		AVCodecContext *avctx = st->codec;
@@ -3112,9 +3112,10 @@ static void *read_thread(void *arg)
 			.sar_num = sar.num,
 			.sar_den = sar.den,
 		};
-		//if (vp.width)
-		//	set_default_window_size(&vp);
+		if (vp.width)
+			set_default_window_size(&vp);
 	}
+#endif
 
 	/* open the streams */
 	if (st_index[AVMEDIA_TYPE_AUDIO] >= 0) {
@@ -3722,6 +3723,8 @@ void libffplay_seek(libffplay_ctx_t * ctx, double wanted_pos, int whence)
 		case LFP_SEEK_CUR:
 			incr = wanted_pos;
 			break;
+		default:
+			return;
 		}
 		if (isnan(pos))
 			pos = (double)is->seek_pos / AV_TIME_BASE;

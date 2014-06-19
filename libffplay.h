@@ -62,8 +62,7 @@ struct libffplay_videomgr {
 	void (*lock_picture)(libffplay_videomgr_t *self, libffplay_picture_t *pic);
 	void (*unlock_picture)(libffplay_videomgr_t *self, libffplay_picture_t *pic);
 	void (*free_picture_planes)(libffplay_videomgr_t *self, libffplay_picture_t *pic);
-	void (*display_picture)(libffplay_videomgr_t *self, libffplay_picture_t *pic,
-		libffplay_rect_t *rect);
+	void (*display_picture)(libffplay_videomgr_t *self, libffplay_picture_t *pic);
 };
 
 enum {

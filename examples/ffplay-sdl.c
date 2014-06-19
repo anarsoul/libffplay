@@ -23,6 +23,7 @@
 #define FF_QUIT_EVENT    (SDL_USEREVENT + 2)
 
 #include <errno.h>
+#include <math.h>
 #include <stdio.h>
 
 #include <SDL.h>
@@ -41,6 +42,8 @@ struct myvideomgr {
 	SDL_Surface *screen;
 	SDL_cond *alloc_cond;
 	SDL_mutex *alloc_mutex;
+	size_t old_w, old_h;
+	SDL_Rect rect;
 };
 
 static void (*ffplay_audio_cb) (void *opaque, void *buf, size_t size);
@@ -192,22 +195,57 @@ void sdl_free_picture_planes(libffplay_videomgr_t *self, libffplay_picture_t *pi
 	pic->allocated = 0;
 }
 
-void sdl_display_picture(libffplay_videomgr_t *self, libffplay_picture_t *pic, libffplay_rect_t *rect)
+static inline void calc_display_rect(libffplay_videomgr_t *self, libffplay_picture_t *pic)
 {
 	struct myvideomgr *myvideomgr = (struct myvideomgr *)self;
-	SDL_Rect sdl_rect = {.w = 0, .h = 0, .x = 0, .y = 0};
+	SDL_Rect *rect = &myvideomgr->rect;
+	float aspect_ratio;
+	size_t width, height, x, y;
+
+	if (pic->sar_num == 0)
+		aspect_ratio = 0;
+	else
+		aspect_ratio = (float)pic->sar_num / (float)pic->sar_den;
+
+	if (aspect_ratio <= 0.0)
+		aspect_ratio = 1.0;
+
+	aspect_ratio *= (float)pic->width / (float)pic->height;
+
+	/* XXX: we suppose the screen has a 1.0 pixel ratio */
+	height = myvideomgr->screen->h;
+	width = ((int)rint(height * aspect_ratio));
+	if (width > myvideomgr->screen->w) {
+		width = myvideomgr->screen->w;
+		height = ((int)rint(width / aspect_ratio));
+	}
+	x = (myvideomgr->screen->w - width) / 2;
+	y = (myvideomgr->screen->h - height) / 2;
+	rect->x = x;
+	rect->y = y;
+	rect->w = width > 1 ? width : 1;
+	rect->h = height > 1 ? height : 1;
+	printf("%dx%d-%dx%d\n",
+		rect->x,
+		rect->y,
+		rect->w,
+		rect->h);
+}
+
+void sdl_display_picture(libffplay_videomgr_t *self, libffplay_picture_t *pic)
+{
+	struct myvideomgr *myvideomgr = (struct myvideomgr *)self;
 	SDL_Overlay *bmp = pic->userdata;
 
 	if (!pic->allocated)
 		return;
 
-	if (rect) {
-		sdl_rect.h = 360;//myvideomgr->screen->h;
-		sdl_rect.w = myvideomgr->screen->w;
-		sdl_rect.x = 0;
-		sdl_rect.y = 60;
+	if (pic->width != myvideomgr->old_w || pic->height != myvideomgr->old_h) {
+		calc_display_rect(self, pic);
+		myvideomgr->old_w = pic->width;
+		myvideomgr->old_h = pic->height;
 	}
-        SDL_DisplayYUVOverlay(bmp, &sdl_rect);
+        SDL_DisplayYUVOverlay(bmp, &myvideomgr->rect);
 }
 
 libffplay_audiomgr_t audiomgr = {
@@ -265,6 +303,8 @@ int main(int argc, char *argv[])
 	videomgr.screen = screen;
 	videomgr.alloc_mutex = SDL_CreateMutex();
 	videomgr.alloc_cond = SDL_CreateCond();
+	videomgr.old_h = 0;
+	videomgr.old_w = 0;
 	libffplay_set_videomgr(ctx, (libffplay_videomgr_t *)&videomgr);
 
 	libffplay_play(ctx, argv[1]);
