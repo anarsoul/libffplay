@@ -98,5 +98,6 @@ double libffplay_stream_length(libffplay_ctx_t *ctx);
 void libffplay_stop(libffplay_ctx_t * ctx);
 void libffplay_exit(libffplay_ctx_t * ctx);
 void libffplay_video_refresh(libffplay_ctx_t * ctx, double *remaining_time);
+void libffplay_deinit(libffplay_ctx_t *ctx);
 
 #endif

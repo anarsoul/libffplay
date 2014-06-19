@@ -1044,18 +1044,13 @@ static void stream_close(VideoState * is)
 	pthread_cond_destroy(&is->subpq_cond);
 	pthread_cond_destroy(&is->continue_read_thread);
 	sws_freeContext(is->img_convert_ctx);
-	av_free(is);
 }
 
-static void do_exit(VideoState * is)
+static void do_stop(VideoState * is)
 {
 	if (is) {
 		stream_close(is);
 	}
-	av_lockmgr_register(NULL);
-	av_freep(&vfilters);
-	avformat_network_deinit();
-	av_log(NULL, AV_LOG_QUIET, "%s", "");
 }
 
 static void sigterm_handler(int sig)
@@ -1107,7 +1102,7 @@ static int video_open(VideoState * is, int force_set_video_mode,
 	if (!screen) {
 		av_log(NULL, AV_LOG_FATAL,
 		       "SDL: could not set video mode - exiting\n");
-		do_exit(is);
+		do_stop(is);
 	}
 	if (!window_title)
 		window_title = input_filename;
@@ -1625,7 +1620,7 @@ static void alloc_picture(VideoState * is)
 		       "Error: the video system does not support an image\n"
 		       "size of %dx%d pixels. Try using -lowres or -vf \"scale=w:h\"\n"
 		       "to reduce the image size.\n", vp->width, vp->height);
-		do_exit(is);
+		do_stop(is);
 	}
 
 	pthread_mutex_lock(&is->pictq_mutex);
@@ -3285,7 +3280,6 @@ static void *read_thread(void *arg)
 			if (is->subtitle_stream >= 0)
 				packet_queue_put_nullpacket(&is->subtitleq,
 							    is->subtitle_stream);
-			av_log(NULL, AV_LOG_INFO, "Put empty frame...\n");
 			av_usleep(10000);
 			eof = 0;
 			continue;
@@ -3636,7 +3630,7 @@ libffplay_ctx_t *libffplay_init(void)
 	if (av_lockmgr_register(lockmgr)) {
 		av_log(NULL, AV_LOG_FATAL,
 		       "Could not initialize lock manager!\n");
-		do_exit(NULL);
+		do_stop(NULL);
 	}
 
 	av_init_packet(&flush_pkt);
@@ -3680,7 +3674,7 @@ void libffplay_set_eventmgr(libffplay_ctx_t * ctx,
 void libffplay_stop(libffplay_ctx_t * ctx)
 {
 	VideoState *is = (struct VideoState *)ctx;
-	do_exit(is);
+	do_stop(is);
 }
 
 void libffplay_pause(libffplay_ctx_t * ctx)
@@ -3762,4 +3756,15 @@ void libffplay_video_refresh(libffplay_ctx_t *ctx, double *remaining_time)
 	} else {
 		video_refresh(is, remaining_time);
 	}
+}
+
+void libffplay_deinit(libffplay_ctx_t *ctx)
+{
+	VideoState *is = (struct VideoState *)ctx;
+
+	av_lockmgr_register(NULL);
+	av_freep(&vfilters);
+	avformat_network_deinit();
+	av_log(NULL, AV_LOG_QUIET, "%s", "");
+	av_free(is);
 }
