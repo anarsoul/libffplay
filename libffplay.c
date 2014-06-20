@@ -3768,6 +3768,11 @@ double libffplay_tell(libffplay_ctx_t * ctx)
 	double pos;
 	VideoState *is = (struct VideoState *)ctx;
 
+	pthread_mutex_lock(&is->container_parsed_mutex);
+	if (!is->container_parsed)
+		pthread_cond_wait(&is->container_parsed_cond, &is->container_parsed_mutex);
+	pthread_mutex_unlock(&is->container_parsed_mutex);
+
 	pos = get_master_clock(is);
 	if (isnan(pos))
 		pos = (double)is->seek_pos / AV_TIME_BASE;
@@ -3777,6 +3782,12 @@ double libffplay_tell(libffplay_ctx_t * ctx)
 double libffplay_stream_length(libffplay_ctx_t * ctx)
 {
 	VideoState *is = (struct VideoState *)ctx;
+
+	pthread_mutex_lock(&is->container_parsed_mutex);
+	if (!is->container_parsed)
+		pthread_cond_wait(&is->container_parsed_cond, &is->container_parsed_mutex);
+	pthread_mutex_unlock(&is->container_parsed_mutex);
+
 	return (double)is->ic->duration / AV_TIME_BASE;
 }
 
