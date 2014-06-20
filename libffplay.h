@@ -80,6 +80,11 @@ enum {
 	LFP_SEEK_CUR = 1,
 };
 
+#define LIBFFPLAY_METADATA_ARTIST "artist"
+#define LIBFFPLAY_METADATA_TITLE "title"
+#define LIBFFPLAY_METADATA_ALBUM "album"
+#define LIBFFPLAY_METADATA_DATE "date"
+
 libffplay_ctx_t *libffplay_init(void);
 void libffplay_set_audiomgr(libffplay_ctx_t *ctx,
 			    libffplay_audiomgr_t *audiomgr);
@@ -88,7 +93,9 @@ void libffplay_set_videomgr(libffplay_ctx_t *ctx,
 void libffplay_set_eventmgr(libffplay_ctx_t *ctx,
 			    libffplay_eventmgr_t *eventmgr);
 /* returns duration if success, negative error code otherwise */
-int libffplay_play(libffplay_ctx_t * ctx, const char *filename);
+int libffplay_open(libffplay_ctx_t * ctx, const char *filename);
+void libffplay_start_play(libffplay_ctx_t * ctx);
+const char *libffplay_get_metadata(libffplay_ctx_t *ctx, const char *key);
 void libffplay_pause(libffplay_ctx_t * ctx);
 void libffplay_resume(libffplay_ctx_t * ctx);
 void libffplay_toggle_pause(libffplay_ctx_t *ctx);

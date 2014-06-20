@@ -276,6 +276,7 @@ struct myeventmgr eventmgr = {
 
 int main(int argc, char *argv[])
 {
+	const char *str;
 	double remaining_time = 0.0;
 	SDL_Surface *screen;
 	libffplay_ctx_t *ctx;
@@ -311,7 +312,20 @@ int main(int argc, char *argv[])
 	videomgr.old_w = 0;
 	libffplay_set_videomgr(ctx, (libffplay_videomgr_t *)&videomgr);
 
-	libffplay_play(ctx, argv[1]);
+	libffplay_open(ctx, argv[1]);
+	str = libffplay_get_metadata(ctx, LIBFFPLAY_METADATA_ARTIST);
+	if (str)
+		printf("Artist: %s\n", str);
+	str = libffplay_get_metadata(ctx, LIBFFPLAY_METADATA_ALBUM);
+	if (str)
+		printf("Album: %s\n", str);
+	str = libffplay_get_metadata(ctx, LIBFFPLAY_METADATA_TITLE);
+	if (str)
+		printf("Title: %s\n", str);
+	str = libffplay_get_metadata(ctx, LIBFFPLAY_METADATA_DATE);
+	if (str)
+		printf("Date: %s\n", str);
+	libffplay_start_play(ctx);
 
 	/* Event loop */
 	for (;;) {

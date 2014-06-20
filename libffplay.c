@@ -154,6 +154,12 @@ enum {
 
 typedef struct VideoState {
 	pthread_t read_tid;
+	pthread_cond_t read_trigger_cond;
+	pthread_mutex_t read_trigger_mutex;
+	pthread_cond_t container_parsed_cond;
+	pthread_mutex_t container_parsed_mutex;
+	int container_parsed;
+	int read_triggered;
 	pthread_t video_tid;
 	AVInputFormat *iformat;
 	int no_background;
@@ -294,7 +300,7 @@ static int wanted_stream[AVMEDIA_TYPE_NB] = {
 
 static int seek_by_bytes = -1;
 static int display_disable;
-static int show_status = 1;
+static int show_status = 0;
 static int av_sync_type = AV_SYNC_AUDIO_MASTER;
 static int64_t start_time = AV_NOPTS_VALUE;
 static int64_t duration = AV_NOPTS_VALUE;
@@ -3093,6 +3099,17 @@ static void *read_thread(void *arg)
 	if (show_status) {
 		av_dump_format(ic, 0, is->filename, 0);
 	}
+	/* read completed */
+	pthread_mutex_lock(&is->container_parsed_mutex);
+	is->container_parsed = 1;
+	pthread_cond_signal(&is->container_parsed_cond);
+	pthread_mutex_unlock(&is->container_parsed_mutex);
+
+	/* Wait for trigger... */
+	pthread_mutex_lock(&is->read_trigger_mutex);
+	if (!is->read_triggered)
+		pthread_cond_wait(&is->read_trigger_cond, &is->read_trigger_mutex);
+	pthread_mutex_unlock(&is->read_trigger_mutex);
 
 	is->show_mode = show_mode;
 #if 0
@@ -3361,7 +3378,11 @@ int stream_open(struct VideoState *is, const char *filename,
 	is->ytop = 0;
 	is->xleft = 0;
 
-	/* start video display */
+	pthread_mutex_init(&is->read_trigger_mutex, NULL);
+	pthread_cond_init(&is->read_trigger_cond, NULL);
+	pthread_mutex_init(&is->container_parsed_mutex, NULL);
+	pthread_cond_init(&is->container_parsed_cond, NULL);
+
 	pthread_mutex_init(&is->pictq_mutex, NULL);
 	pthread_cond_init(&is->pictq_cond, NULL);
 
@@ -3643,14 +3664,26 @@ libffplay_ctx_t *libffplay_init(void)
 	return (libffplay_ctx_t *) is;
 }
 
-int libffplay_play(libffplay_ctx_t * ctx, const char *filename)
+int libffplay_open(libffplay_ctx_t * ctx, const char *filename)
 {
 	int res;
 	struct VideoState *is = (struct VideoState *)ctx;
 
+	is->container_parsed = 0;
+	is->read_triggered = 0;
 	res = stream_open(is, filename, file_iformat);
 
 	return res;
+}
+
+void libffplay_start_play(libffplay_ctx_t * ctx)
+{
+	struct VideoState *is = (struct VideoState *)ctx;
+
+	pthread_mutex_lock(&is->read_trigger_mutex);
+	is->read_triggered = 1;
+	pthread_cond_signal(&is->read_trigger_cond);
+	pthread_mutex_unlock(&is->read_trigger_mutex);
 }
 
 void libffplay_set_audiomgr(libffplay_ctx_t * ctx,
@@ -3767,4 +3800,21 @@ void libffplay_deinit(libffplay_ctx_t *ctx)
 	avformat_network_deinit();
 	av_log(NULL, AV_LOG_QUIET, "%s", "");
 	av_free(is);
+}
+
+const char *libffplay_get_metadata(libffplay_ctx_t *ctx, const char *key)
+{
+	AVDictionaryEntry *tag;
+	VideoState *is = (struct VideoState *)ctx;
+
+	pthread_mutex_lock(&is->container_parsed_mutex);
+	if (!is->container_parsed)
+		pthread_cond_wait(&is->container_parsed_cond, &is->container_parsed_mutex);
+	pthread_mutex_unlock(&is->container_parsed_mutex);
+
+	tag = av_dict_get(is->ic->metadata, key, NULL, 0);
+	if (!tag)
+		return NULL;
+
+	return tag->value;
 }
